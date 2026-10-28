@@ -18,16 +18,30 @@ def clean_products(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
 
     # Prices with a currency symbol need manual verification.
+    
+    # Dataset currency: USD.
+    # Plain numeric prices are interpreted as USD.
     raw_price = result["price"].astype("string").str.strip()
-    result["price_needs_review"] = raw_price.str.contains(
-        r"[$€£]", regex=True, na=False
+
+    has_usd_symbol = raw_price.str.contains(
+        r"\$", regex=True, na=False
+    )
+    has_other_currency = raw_price.str.contains(
+        r"[₹€£]", regex=True, na=False
     )
 
-    # Numeric prices are interpreted as INR, per the project assumption.
-    result["price"] = raw_price.str.replace(
-        r"[₹,\s]", "", regex=True
-    ).str.replace(r"[$€£]", "", regex=True)
-    result["price"] = pd.to_numeric(result["price"], errors="coerce")
+    result["price_needs_review"] = has_other_currency
+
+    cleaned_price = raw_price.str.replace(
+        r"[$,\s]", "", regex=True
+    )
+    result["price"] = pd.to_numeric(
+        cleaned_price, errors="coerce"
+    )
+
+    result["price_needs_review"] |= (
+        result["price"].isna() | result["price"].le(0)
+    )
 
     # Convert numeric fields into consistent numeric types.
     for column in ["rating", "camera", "display_size",

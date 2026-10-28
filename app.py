@@ -205,7 +205,64 @@ def main():
     st.success(
         f"Found {len(recommendations)} matching product(s)."
     )
+    st.subheader("Why these phones were recommended")
 
+    feature_labels = {
+        "rating": "Customer rating",
+        "camera": "Camera",
+        "battery": "Battery",
+        "ram": "RAM",
+        "storage": "Storage",
+        "price": "Affordability",
+    }
+
+    if recommendations.empty:
+        st.info("No phones match your current filters.")
+    else:
+        for _, phone in recommendations.iterrows():
+            phone_name = phone.get("name", "Recommended phone")
+
+            with st.expander(f"{phone_name} — {phone['match_score']:.1f}/100"):
+                st.metric(
+                    "Specification completeness",
+                    f"{phone['data_completeness']:.1f}%",
+                )
+                st.caption(
+                    f"Missing specification fields: "
+                    f"{int(phone['missing_specifications'])}"
+                )
+                breakdown_rows = []
+                for feature, label in feature_labels.items():
+                    normalized_score = phone[f"{feature}_normalized"]
+                    contribution = phone[f"{feature}_contribution"]
+
+                    breakdown_rows.append(
+                        {
+                            "Feature": label,
+                            "Normalized score": round(
+                                normalized_score, 3
+                            ),
+                            "Weight (%)": round(
+                                custom_weights[feature]
+                                / sum(custom_weights.values())
+                                * 100,
+                                1,
+                            ),
+                            "Contribution (points)": round(
+                                contribution, 2
+                            ),
+                        }
+                    )
+
+                breakdown = pd.DataFrame(breakdown_rows)
+
+                st.dataframe(breakdown, hide_index=True, use_container_width=True)
+
+                st.caption(
+                    "The contribution points add up to the match score. "
+                    "A missing specification uses the existing neutral "
+                    "score of 0.5."
+                )
     # Show each recommendation as a separate card.
     for rank, (_, phone) in enumerate(
         recommendations.iterrows(), start=1
@@ -256,32 +313,77 @@ def main():
 
             st.caption(phone["recommendation_reason"])
 
-    st.subheader("Compare results")
+
+    st.subheader("Compare recommended phones")
 
     comparison_columns = [
         "name",
         "price",
+        "match_score",
         "rating",
         "camera",
-        "display_type",
         "battery",
         "ram",
         "storage_gb",
-        "weight",
+        "display_type",
+        "display_size",
         "processor",
-        "match_score",
+        "data_completeness",
+        "missing_specifications",
     ]
 
+    # Keep only columns present in the recommendation results.
     available_columns = [
-        column for column in comparison_columns
+        column
+        for column in comparison_columns
         if column in recommendations.columns
     ]
 
-    st.dataframe(
-        recommendations[available_columns],
-        use_container_width=True,
-        hide_index=True,
+    comparison = recommendations[available_columns].copy()
+
+    # Give the table readable column headings.
+    column_labels = {
+        "name": "Phone",
+        "price": "Price (USD)",
+        "match_score": "Match score (/100)",
+        "rating": "Customer rating (/5)",
+        "camera": "Camera (MP)",
+        "battery": "Battery (mAh)",
+        "ram": "RAM (GB)",
+        "storage_gb": "Storage (GB)",
+        "display_type": "Display type",
+        "display_size": "Display size",
+        "processor": "Processor",
+        "data_completeness": "Specifications available (%)",
+        "missing_specifications": "Missing fields",
+    }
+
+    comparison = comparison.rename(columns=column_labels)
+
+    # Let the user choose which recommendations to compare.
+    phone_names = recommendations["name"].astype(str).tolist()
+    selected_phones = st.multiselect(
+        "Select phones to compare",
+        options=phone_names,
+        default=phone_names[:min(3, len(phone_names))],
+        key="pj1_compare_phones",
     )
+
+    if selected_phones:
+        selected_comparison = comparison[
+            comparison["Phone"].astype(str).isin(selected_phones)
+        ]
+
+        st.dataframe(
+            selected_comparison.style.highlight_max(
+                subset=["Match score (/100)"],
+                color="#d9ead3",
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Select at least one phone to compare.")
 
 
 if __name__ == "__main__":

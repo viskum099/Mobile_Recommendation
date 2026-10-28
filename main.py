@@ -22,7 +22,7 @@ def my_app():
 
     recommendations = recommend_products(
         products,
-        budget=25000,
+        budget=1000,
         min_rating=3.5,
         min_ram_gb=4,
         min_storage_gb=128,
